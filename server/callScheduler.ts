@@ -1,6 +1,7 @@
 import { checkExistingBooking } from "./calendly";
 import { dispatchTwilioCall } from "./twilio";
 import { getLeadById, updateLead, createCallLog, getSetting } from "./db";
+import { dispatchElDemoFollowupCall, isElDemoFollowupEnabled } from "./elevenlabs";
 
 /**
  * Schedule an outbound call for a lead after a configurable delay.
@@ -66,6 +67,19 @@ export async function executeCall(leadId: number, webhookBaseUrl: string): Promi
     const systemEnabled = await getSetting("system_enabled");
     if (systemEnabled === "false") {
       console.log(`[Scheduler] System is paused — skipping call for lead #${leadId}`);
+      return;
+    }
+
+    // EL ConvAI + Telnyx SIP demo_followup (feature-flagged) replaces Twilio + Gemini
+    if (isElDemoFollowupEnabled()) {
+      const { conversationId } = await dispatchElDemoFollowupCall({
+        toNumber: lead.phone,
+        leadName: lead.name || "",
+        leadEmail: lead.email || "",
+        leadId: lead.id,
+      });
+      console.log(`[Scheduler] EL demo_followup dispatched for lead #${leadId}, conversation: ${conversationId}`);
+      await updateLead(leadId, { status: "called", blandCallId: conversationId, calledAt: new Date() });
       return;
     }
 
