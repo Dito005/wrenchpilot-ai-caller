@@ -40,10 +40,12 @@ function testAgent() {
         optimize_streaming_latency: 3,
         agent_output_audio_format: "pcm_16000",
       },
-      background_sound: { source_type: "preset", source_id: "office2", volume: 0.15, crossfade_loop: true },
       turn: { turn_model: "turn_v3", turn_eagerness: "patient", turn_timeout: 10, speculative_turn: true },
       asr: { provider: "scribe_realtime", quality: "high", user_input_audio_format: "pcm_16000" },
-      conversation: { max_duration_seconds: 180 },
+      conversation: {
+        max_duration_seconds: 180,
+        background_sound: { source_type: "preset", source_id: "office2", volume: 0.15, crossfade_loop: true },
+      },
       agent: {
         first_message: "Hi, is this Adeel?",
         prompt: {
@@ -182,6 +184,27 @@ describe("agent drift", () => {
     expect(checkAgentDrift(testAgent(), resolveVoiceSlot("male_1"))).toEqual({ drift: [], unverified: [] });
   });
 
+  it("passes a fresh GET matching the verified live quiet-bland TEST agent", () => {
+    // Exactly the fields Caller Bot read live, at the paths it read them from.
+    const agent = testAgent();
+    expect(agent.conversation_config.tts).toMatchObject({
+      model_id: "eleven_v4_turbo",
+      voice_id: "oWjuL7HSoaEJRMDMP3HD",
+      expressive_mode: false,
+      stability: 0.7,
+      speed: 0.92,
+      similarity_boost: 0.75,
+    });
+    expect(agent.conversation_config.conversation.background_sound).toEqual({
+      source_type: "preset",
+      source_id: "office2",
+      volume: 0.15,
+      crossfade_loop: true,
+    });
+    expect(agent.conversation_config.agent.prompt.timezone).toBe("America/New_York");
+    expect(checkAgentDrift(agent)).toEqual({ drift: [], unverified: [] });
+  });
+
   it("reports changed Layer A values", () => {
     const agent = testAgent();
     agent.conversation_config.tts.speed = 1.1;
@@ -193,9 +216,9 @@ describe("agent drift", () => {
 
   it("reports background sound changed or turned off", () => {
     const agent = testAgent();
-    agent.conversation_config.background_sound.volume = 0.4;
+    agent.conversation_config.conversation.background_sound.volume = 0.4;
     expect(checkAgentDrift(agent).drift.join(" ")).toMatch(/background_sound.volume/);
-    (agent.conversation_config as Record<string, unknown>).background_sound = null;
+    (agent.conversation_config.conversation as Record<string, unknown>).background_sound = null;
     expect(checkAgentDrift(agent).drift).toHaveLength(4);
   });
 

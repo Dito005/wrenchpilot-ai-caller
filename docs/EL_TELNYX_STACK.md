@@ -86,7 +86,13 @@ ELEVENLABS_API_KEY=... npx tsx scripts/el-preflight.ts male_1   # Andrew
 
 The tRPC equivalents are `callerBot.elDemoFollowupPreflight` (query) and `callerBot.dialElDemoFollowup({ dryRun: true, ... })`.
 
-> The TEST agent was last verified on the v3 + expressive + background-off settings. Until it is switched to the quiet-bland Layer A above in the ElevenLabs dashboard, preflight will report drift and refuse to dial. That is intended.
+A read-only live GET on 2026-10-26 (America/New_York) confirmed that the TEST agent matches quiet-bland Layer A and is still on the TEST phone. These field paths in the agent response are verified:
+
+- TTS: `conversation_config.tts.{model_id, voice_id, expressive_mode, stability, speed, similarity_boost}`
+- Background: `conversation_config.conversation.background_sound.{source_type, source_id, volume, crossfade_loop}`
+- Timezone: `conversation_config.agent.prompt.timezone`
+
+Every preflight runs a fresh GET (nothing is cached). If that GET matches, preflight passes. Dialing is still blocked until `EL_PLACE_CALLS_APPROVED=true`.
 
 ## Not in this repo
 

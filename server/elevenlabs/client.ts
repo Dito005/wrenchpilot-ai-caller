@@ -176,6 +176,10 @@ function readFirst(obj: unknown, paths: string[]): unknown {
 
 const CC = "conversation_config";
 
+// TTS, background_sound and timezone paths below were confirmed against a live
+// read-only GET of the TEST agent (2026-10-26). Every preflight does a fresh
+// GET — nothing is cached — so drift is always judged on the agent as it is now.
+
 const FIELD_CHECKS: Array<{ label: string; paths: string[]; expected: unknown }> = [
   { label: "tts.model_id", paths: [`${CC}.tts.model_id`], expected: LAYER_A.tts.modelId },
   { label: "tts.voice_id", paths: [`${CC}.tts.voice_id`], expected: LAYER_A.tts.voiceId },
@@ -187,22 +191,22 @@ const FIELD_CHECKS: Array<{ label: string; paths: string[]; expected: unknown }>
   { label: "tts.agent_output_audio_format", paths: [`${CC}.tts.agent_output_audio_format`], expected: LAYER_A.tts.outputAudioFormat },
   {
     label: "background_sound.source_type",
-    paths: [`${CC}.background_sound.source_type`, `${CC}.agent.background_sound.source_type`, `${CC}.tts.background_sound.source_type`],
+    paths: [`${CC}.conversation.background_sound.source_type`],
     expected: LAYER_A.backgroundSound.sourceType,
   },
   {
     label: "background_sound.source_id",
-    paths: [`${CC}.background_sound.source_id`, `${CC}.agent.background_sound.source_id`, `${CC}.tts.background_sound.source_id`],
+    paths: [`${CC}.conversation.background_sound.source_id`],
     expected: LAYER_A.backgroundSound.sourceId,
   },
   {
     label: "background_sound.volume",
-    paths: [`${CC}.background_sound.volume`, `${CC}.agent.background_sound.volume`, `${CC}.tts.background_sound.volume`],
+    paths: [`${CC}.conversation.background_sound.volume`],
     expected: LAYER_A.backgroundSound.volume,
   },
   {
     label: "background_sound.crossfade_loop",
-    paths: [`${CC}.background_sound.crossfade_loop`, `${CC}.agent.background_sound.crossfade_loop`, `${CC}.tts.background_sound.crossfade_loop`],
+    paths: [`${CC}.conversation.background_sound.crossfade_loop`],
     expected: LAYER_A.backgroundSound.crossfadeLoop,
   },
   { label: "turn.turn_model", paths: [`${CC}.turn.turn_model`, `${CC}.turn.model`], expected: LAYER_A.turn.model },
@@ -218,7 +222,7 @@ const FIELD_CHECKS: Array<{ label: string; paths: string[]; expected: unknown }>
   { label: "agent.prompt.max_tokens", paths: [`${CC}.agent.prompt.max_tokens`], expected: DEMO_FOLLOWUP.llm.maxTokens },
   {
     label: "timezone",
-    paths: [`${CC}.agent.prompt.timezone`, `${CC}.agent.timezone`, `${CC}.conversation.timezone`],
+    paths: [`${CC}.agent.prompt.timezone`],
     expected: DEMO_FOLLOWUP.timezone,
   },
   { label: "conversation.max_duration_seconds", paths: [`${CC}.conversation.max_duration_seconds`], expected: DEMO_FOLLOWUP.maxDurationSeconds },
