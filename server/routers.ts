@@ -7,6 +7,15 @@ import { getAllLeads, getLeadById, getCallLogsByLeadId, getSetting, setSetting }
 import { dispatchTwilioCall, purchaseTwilioNumber, getTwilioCallDetails, listTwilioCalls, listTwilioMessages, getActiveSessions } from "./twilio";
 import { scheduleCall, executeCall } from "./callScheduler";
 import { TRPCError } from "@trpc/server";
+import {
+  dispatchElDemoFollowupCall,
+  isElDemoFollowupEnabled,
+  preflightDemoFollowup,
+  resolveVoiceSlot,
+  toTrpcError,
+  DEMO_FOLLOWUP,
+  VOICE_SLOTS,
+} from "./elevenlabs";
 
 export const appRouter = router({
   system: systemRouter,
@@ -122,6 +131,8 @@ export const appRouter = router({
         name: z.string().min(1).optional(),
         email: z.string().optional(),
         leadId: z.number().optional(),
+        /** EL path only: voice slot key or name (female/Amy, male_1/Andrew, …). */
+        voiceSlot: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const baseUrl = process.env.NODE_ENV === "development"
@@ -138,6 +149,22 @@ export const appRouter = router({
             leadIdForCall = lead.id;
             if (lead.name) leadName = lead.name;
             if (lead.email) leadEmail = lead.email;
+          }
+        }
+
+        // EL ConvAI + Telnyx SIP demo_followup bypasses Twilio + Gemini entirely.
+        if (isElDemoFollowupEnabled()) {
+          try {
+            const { conversationId } = await dispatchElDemoFollowupCall({
+              toNumber: input.phone,
+              leadName,
+              leadEmail,
+              leadId: leadIdForCall,
+              voiceSlot: input.voiceSlot,
+            });
+            return { success: true, callId: conversationId };
+          } catch (err) {
+            throw toTrpcError(err);
           }
         }
 
@@ -189,6 +216,54 @@ export const appRouter = router({
         await updateCallLog(callLog.id, { blandCallId: callSid });
 
         return { success: true, callId: callSid };
+      }),
+
+    // ─── ElevenLabs ConvAI + Telnyx SIP (demo_followup) ─────────────────────
+
+    /** Read-only: is the TEST phone still on the TEST agent, and does the agent match Layer A? */
+    elDemoFollowupPreflight: publicProcedure
+      .input(z.object({ voiceSlot: z.string().optional() }).optional())
+      .query(async ({ input }) => {
+        try {
+          const voice = resolveVoiceSlot(input?.voiceSlot);
+          const result = await preflightDemoFollowup(voice);
+          return { enabled: isElDemoFollowupEnabled(), voice, ...result };
+        } catch (err) {
+          throw toTrpcError(err);
+        }
+      }),
+
+    elVoiceSlots: publicProcedure.query(() => ({
+      slots: Object.entries(VOICE_SLOTS).map(([slot, v]) => ({ slot, name: v.name })),
+      profile: DEMO_FOLLOWUP.profile,
+    })),
+
+    /** Dial (or dry-run) demo_followup through EL. Requires EL_DEMO_FOLLOWUP_ENABLED=true unless dryRun. */
+    dialElDemoFollowup: publicProcedure
+      .input(z.object({
+        phone: z.string().min(7),
+        name: z.string().optional(),
+        email: z.string().optional(),
+        voiceSlot: z.string().optional(),
+        dryRun: z.boolean().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        if (!input.dryRun && !isElDemoFollowupEnabled()) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "EL_DEMO_FOLLOWUP_ENABLED is not true; only dryRun is allowed." });
+        }
+        try {
+          const result = await dispatchElDemoFollowupCall({
+            toNumber: input.phone,
+            leadName: input.name,
+            leadEmail: input.email,
+            leadId: 0,
+            voiceSlot: input.voiceSlot,
+            dryRun: input.dryRun,
+          });
+          return { success: true, callId: result.conversationId, dryRun: result.dryRun, request: result.request };
+        } catch (err) {
+          throw toTrpcError(err);
+        }
       }),
 
     // Fire a test call using Twilio + Gemini Live
